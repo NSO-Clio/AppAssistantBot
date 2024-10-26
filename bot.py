@@ -3,7 +3,11 @@ from telebot import types
 import logging
 import json
 from db import UserDB
+import config
+from model import PromptGenerator, ClioYandex_GPT
+import preproc_text
 # from keyboards import Keyboard
+
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -14,7 +18,13 @@ user_questions = {}
 selected_topic = {}
 
 # Инициализация бота
-bot = telebot.TeleBot('token')
+bot = telebot.TeleBot(config.TG_BOT_TOKEN)
+
+chunks = preproc_text.preproc_docx_file(
+    docx_file_path='documentation/data.docx',
+    output_json='documentation/output.json',
+    data_txt_path='documentation/data.txt'
+)
 
 # Загрузка структуры документации из JSON
 with open("documentation/output.json", "r", encoding="utf-8") as file:
@@ -23,6 +33,17 @@ with open("documentation/output.json", "r", encoding="utf-8") as file:
 # Загрузка структуры частых вопросов из JSON
 with open("documentation/data_quastions.json", "r", encoding="utf-8") as file:
     questions_answers = json.load(file)
+
+prompt_gener = PromptGenerator(
+    chunks=chunks,
+    qna=questions_answers
+)
+model = ClioYandex_GPT(
+    oauth_token=config.YANDEX_PASSPORT_O_AUTH_TOKEN,
+    modelUri=config.MODEL_URI,
+    prompt_gener=prompt_gener
+)
+
 
 class Keyboard:
     @staticmethod
@@ -58,12 +79,14 @@ class Keyboard:
         markup.add(types.InlineKeyboardButton(text="Назад", callback_data="show_initial_questions"))
         return markup
 
+
 # Функция для удаления предыдущего сообщения
 def delete_previous_message(telegram_id, message_id):
     try:
         bot.delete_message(telegram_id, message_id)
     except Exception as e:
         logger.error(f"Error deleting message: {e}")
+
 
 # Обработчик команды /start
 @bot.message_handler(commands=['start'])
@@ -72,6 +95,7 @@ def send_welcome(message):
     delete_previous_message(telegram_id, message.message_id)
     logger.info(f"User {telegram_id} started the bot.")
     bot.send_message(telegram_id, "Добро пожаловать в QA бот компании СИЛА.\nНажмите на кнопку ниже и ознакомьтесь с документацией приложения:", reply_markup=Keyboard.create_main_menu())
+
 
 # Обработчик нажатия кнопки "Документация"
 @bot.callback_query_handler(func=lambda call: call.data == 'doc')
@@ -86,8 +110,9 @@ def handle_documentation(call):
     markup.add(types.InlineKeyboardButton(text="Назад", callback_data="start"))
 
     # Отправка документации
-    with open("documentation/main.docx", "rb") as file:
+    with open("documentation/data.docx", "rb") as file:
         bot.send_document(telegram_id, file, caption="Ознакомьтесь с документацией.", reply_markup=markup)
+
 
 # Обработчик для кнопки «Назад»
 @bot.callback_query_handler(func=lambda call: call.data == 'start')
@@ -100,6 +125,7 @@ def go_back(call):
 
     bot.send_message(telegram_id, "Добро пожаловать в QA бот компании СИЛА.\nНажмите на кнопку ниже и ознакомьтесь с документацией приложения:", reply_markup=Keyboard.create_main_menu())
 
+
 # Обработка часто задаваемых вопросов
 @bot.callback_query_handler(func=lambda call: call.data == 'often_questions')
 def handle_often_questions(call):
@@ -109,15 +135,18 @@ def handle_often_questions(call):
     markup = Keyboard.create_initial_questions_markup()
     bot.send_message(telegram_id, "Список частых вопросов:", reply_markup=markup)
 
+
 @bot.callback_query_handler(func=lambda call: call.data == "show_all_questions")
 def show_all_questions(call):
     markup = Keyboard.create_all_questions_markup()
     bot.edit_message_reply_markup(chat_id=call.message.chat.id, message_id=call.message.message_id, reply_markup=markup)
 
+
 @bot.callback_query_handler(func=lambda call: call.data == "show_initial_questions")
 def show_initial_questions(call):
     markup = Keyboard.create_initial_questions_markup()
     bot.edit_message_reply_markup(chat_id=call.message.chat.id, message_id=call.message.message_id, reply_markup=markup)
+
 
 # Обработчик для выбора вопроса из часто задаваемых
 @bot.callback_query_handler(func=lambda call: call.data.startswith("get_often_question_"))
@@ -131,6 +160,7 @@ def handle_question(call):
     except (ValueError, IndexError) as e:
         print(f"Error processing question: {e}")
         bot.send_message(call.message.chat.id, "Произошла ошибка при обработке вашего запроса.")
+
 
 # Обработка нажатия кнопки "Остались вопросы по документации?"
 @bot.callback_query_handler(func=lambda call: call.data == 'ask_question')
@@ -147,6 +177,7 @@ def ask_question(call):
     markup.add(types.InlineKeyboardButton(text="Назад", callback_data="start"))
     bot.send_message(telegram_id, "В какой части документации у вас возник вопрос?", reply_markup=markup)
 
+
 # Обработка выбора темы вопроса
 @bot.callback_query_handler(func=lambda call: call.data.startswith("topic_"))
 def choose_topic(call):
@@ -161,10 +192,11 @@ def choose_topic(call):
 
 
 # TODO
-# ЕГОРРРРРРРРРРРРРРР БЛЯТЬ ТУТ РЕДАЧЬ
 # Обработка текстовых сообщений, если пользователь находится в процессе задать вопрос
 @bot.message_handler(func=lambda message: message.chat.id in selected_topic)
 def handle_user_question(message):
+    global model
+
     telegram_id = message.chat.id
     question = message.text
     topic = selected_topic[telegram_id]  # Извлекаем выбранную тему
@@ -177,9 +209,16 @@ def handle_user_question(message):
         'question': question,
         'topic': topic
     }
-
-    bot.send_message(telegram_id, "Здесь будет ответ на ваш вопрос.\nЕсли у вас ещё остались вопросы, присылайте, разберёмся во всём!")
-
+    print(question)
+    answer = model.question(question)
+    # bot.send_message(telegram_id, "Здесь будет ответ на ваш вопрос.\nЕсли у вас ещё остались вопросы, присылайте, разберёмся во всём!")
+    if '[img_data/imgs' in answer:
+        image_paths, cleaned_text = preproc_text.extract_and_remove_image_paths(answer)
+        with open(image_paths, 'rb') as img:
+            bot.send_photo(message.chat.id, img, caption=cleaned_text)
+    else:
+        bot.send_message(telegram_id, answer)
+    print(answer)
     # Кнопки "Вопрос решён" и "Задать другой вопрос"
     resolution_markup = types.InlineKeyboardMarkup()
     resolution_markup.add(
@@ -188,6 +227,7 @@ def handle_user_question(message):
     )
 
     bot.send_message(telegram_id, "Вы можете нажать кнопку ниже, чтобы подтвердить, что ваш вопрос решён:", reply_markup=resolution_markup)
+
 
 # Обработчик для кнопки "Вопрос решён"
 @bot.callback_query_handler(func=lambda call_data: call_data.data == "question_resolved")
@@ -206,6 +246,7 @@ def question_resolved(call_data):
     )
 
     bot.send_message(telegram_id, "Пожалуйста, оцените качество ответа на ваш вопрос:\nГде 1 - вы не однакратно пытались задать вопрос ассистенту, но он не дал нужного ответа, а 5 - бот верно ответил на ваш вопрос и помог вам разобраться в вашем вопросе.", reply_markup=quality_markup)
+
 
 # Обработчик для оценки качества ответа
 @bot.callback_query_handler(func=lambda call_data: call_data.data.startswith("quality_"))
