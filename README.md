@@ -29,8 +29,8 @@
 
 ```python
 TG_BOT_TOKEN = 'YOUR_TOKEN'
-yandexPassportOauthToken = 'YOUR_TOKEN'
-modelUri = 'YOUR_URL'
+YANDEX_PASSPORT_O_AUTH_TOKEN = 'YOUR_TOKEN'
+MODEL_URI = 'YOUR_URi'
 ```
 
 ## Запуск с docx файлом, который дан изначально
