@@ -1,5 +1,3 @@
-# AppAssistantBot
-
 # QnA-Bot для работы с приложением
 
 # Заказчик
