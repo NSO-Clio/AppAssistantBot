@@ -46,6 +46,20 @@ def send_welcome(message):
     )
 
 
+# описание функций бота, если пользователь ввёл вопрос не туда
+@bot.message_handler(func=lambda message: True)
+def handle_random_message(message):
+    telegram_id = message.chat.id
+    response_text = (
+        "Привет! Я — QA бот компании СИЛА. Вот что я умею:\n\n"
+        "1. Документация: Нажмите на кнопку 'Документация' в меню, чтобы ознакомиться с основными разделами.\n"
+        "2. Часто задаваемые вопросы: Нажмите 'Частые вопросы', чтобы просмотреть наиболее популярные вопросы.\n"
+        "3. Задать вопрос: Вы можете задать любой вопрос, выбрав соответствующий раздел, и я помогу вам найти ответ.\n\n"
+        "Просто воспользуйтесь кнопками в меню или напишите /start для начала!"
+    )
+    bot.send_message(telegram_id, response_text, reply_markup=Keyboard.create_main_menu())
+
+
 # Кнопка "Документация" — отправка документации и кнопок навигации
 @bot.callback_query_handler(func=lambda call: call.data == 'doc')
 def handle_documentation(call):
