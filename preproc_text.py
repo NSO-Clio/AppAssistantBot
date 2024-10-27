@@ -2,7 +2,26 @@ import docx2txt
 import re
 import json
 import os
-from typing import Dict, List, Union
+from typing import Dict, List, Union, Tuple
+
+
+def extract_and_remove_image_paths(text: str) -> Tuple[List[str], str]:
+    """
+    Извлекает пути изображений формата [img_data/imgsX.jpg] из текста и удаляет их.
+
+    :param text: Исходный текст
+    :return: Кортеж из списка путей изображений и текста без этих путей
+    """
+    # Регулярное выражение для поиска путей изображений
+    pattern = r'\[img_data/imgs\d+\.jpg\]'
+    
+    # Находим все пути изображений
+    image_paths = re.findall(pattern, text)
+    
+    # Удаляем найденные пути из текста
+    cleaned_text = re.sub(pattern, '', text)
+    
+    return image_paths, cleaned_text
 
 
 def manage_file(file_path: str, file_type: str = 'txt') -> None:

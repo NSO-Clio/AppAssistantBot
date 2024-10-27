@@ -40,8 +40,7 @@ prompt_gener = PromptGenerator(
 )
 model = ClioYandex_GPT(
     oauth_token=config.YANDEX_PASSPORT_O_AUTH_TOKEN,
-    modelUri=config.MODEL_URI,
-    prompt_gener=prompt_gener
+    modelUri=config.MODEL_URI
 )
 
 
@@ -131,20 +130,19 @@ def go_back(call):
 def handle_often_questions(call):
     telegram_id = call.message.chat.id
     delete_previous_message(telegram_id, call.message.message_id)
-
-    markup = Keyboard.create_initial_questions_markup()
+    markup = Keyboard.create_initial_questions_markup(questions_answers=questions_answers)
     bot.send_message(telegram_id, "Список частых вопросов:", reply_markup=markup)
 
 
 @bot.callback_query_handler(func=lambda call: call.data == "show_all_questions")
 def show_all_questions(call):
-    markup = Keyboard.create_all_questions_markup()
+    markup = Keyboard.create_all_questions_markup(questions_answers=questions_answers)
     bot.edit_message_reply_markup(chat_id=call.message.chat.id, message_id=call.message.message_id, reply_markup=markup)
 
 
 @bot.callback_query_handler(func=lambda call: call.data == "show_initial_questions")
 def show_initial_questions(call):
-    markup = Keyboard.create_initial_questions_markup()
+    markup = Keyboard.create_initial_questions_markup(questions_answers=questions_answers)
     bot.edit_message_reply_markup(chat_id=call.message.chat.id, message_id=call.message.message_id, reply_markup=markup)
 
 
@@ -183,19 +181,20 @@ def ask_question(call):
 def choose_topic(call):
     telegram_id = call.message.chat.id
     delete_previous_message(telegram_id, call.message.message_id)
-    topic = call.data.split("_")[1]  # Извлекаем тему
-    if topic:
+    topic = call.data.split("_", 1)[1]  # Извлекаем тему (после "topic_")
+    if topic:  # Если тема выбрана
         selected_topic[telegram_id] = topic  # Сохраняем выбранную тему
-        bot.send_message(telegram_id, f"Вы выбрали вопрос с темой \"{topic}\". Пожалуйста, введите ваш вопрос:")
-    else:
-        bot.send_message(telegram_id, f"Пожалуйста, введите ваш вопрос:")
+        bot.send_message(telegram_id, f"Вы выбрали вопрос с темой \"{topic}\".\nПожалуйста, введите ваш вопрос:")
+    else:  # Если выбрана кнопка "Другое"
+        selected_topic[telegram_id] = "Другое"
+        bot.send_message(telegram_id, "Пожалуйста, введите ваш вопрос:")
 
 
 # TODO
 # Обработка текстовых сообщений, если пользователь находится в процессе задать вопрос
 @bot.message_handler(func=lambda message: message.chat.id in selected_topic)
 def handle_user_question(message):
-    global model
+    global model, prompt_gener
 
     telegram_id = message.chat.id
     question = message.text
@@ -204,13 +203,16 @@ def handle_user_question(message):
     # Логируем вопрос пользователя
     logger.info(f"User {telegram_id} asked a question on topic '{topic}': {question}")
 
+    print(question)
+    answer = model.question(question, prompt_gener)
+
     # Сохраняем вопрос в словаре
     user_questions[telegram_id] = {
         'question': question,
-        'topic': topic
+        'topic': topic,
+        'answer': answer
     }
-    print(question)
-    answer = model.question(question)
+
     # bot.send_message(telegram_id, "Здесь будет ответ на ваш вопрос.\nЕсли у вас ещё остались вопросы, присылайте, разберёмся во всём!")
     if '[img_data/imgs' in answer:
         image_paths, cleaned_text = preproc_text.extract_and_remove_image_paths(answer)
@@ -251,9 +253,23 @@ def question_resolved(call_data):
 # Обработчик для оценки качества ответа
 @bot.callback_query_handler(func=lambda call_data: call_data.data.startswith("quality_"))
 def handle_quality_rating(call_data):
+    global prompt_gener, model
+
     telegram_id = call_data.message.chat.id
-    quality_rating = call_data.data.split("_")[1]  # Извлекаем рейтинг
+    quality_rating = int(call_data.data.split("_")[1])  # Извлекаем рейтинг
     delete_previous_message(telegram_id, call_data.message.message_id)
+
+    question = user_questions[telegram_id]['question']
+    topic = user_questions[telegram_id]['topic']
+    answer = user_questions[telegram_id]['answer']
+    with UserDB('user_database.db') as db:
+        db.add_question(telegram_id, question, answer, topic, quality_rating)
+        print(db.get_all_data())
+    if quality_rating >= 4:
+        prompt_gener.record_qna(
+            question=question,
+            answer=answer
+        )
 
     # Логируем оценку
     logger.info(f"User {telegram_id} rated the answer quality: {quality_rating}")
