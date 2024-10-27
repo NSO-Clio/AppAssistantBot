@@ -6,6 +6,8 @@ import config
 import preproc_text
 from keyboards import Keyboard
 from initialization import BotInitializer
+import queue
+import threading
 
 
 # Настройка логирования
@@ -23,6 +25,11 @@ documentation_structure = initializer.documentation_structure
 questions_answers = initializer.questions_answers
 prompt_gener = initializer.prompt_generator
 model = initializer.model
+
+# Обработка активных вопросов
+activity_question = False
+request_queue = queue.Queue()  # Очередь для хранения запросов
+queue_lock = threading.Lock()
 
 
 # Удаление предыдущего сообщения
@@ -46,15 +53,14 @@ def send_welcome(message):
     )
 
 
-# описание функций бота, если пользователь ввёл вопрос не туда
-@bot.message_handler(func=lambda message: True)
+@bot.message_handler(func=lambda message: message.chat.id not in selected_topic)
 def handle_random_message(message):
     telegram_id = message.chat.id
     response_text = (
         "Привет! Я — QA бот компании СИЛА. Вот что я умею:\n\n"
-        "1. Документация: Нажмите на кнопку 'Документация' в меню, чтобы ознакомиться с основными разделами.\n"
-        "2. Часто задаваемые вопросы: Нажмите 'Частые вопросы', чтобы просмотреть наиболее популярные вопросы.\n"
-        "3. Задать вопрос: Вы можете задать любой вопрос, выбрав соответствующий раздел, и я помогу вам найти ответ.\n\n"
+        "1. **Документация**: Нажмите на кнопку 'Документация' в меню, чтобы ознакомиться с основными разделами.\n"
+        "2. **Часто задаваемые вопросы**: Нажмите 'Частые вопросы', чтобы просмотреть наиболее популярные вопросы.\n"
+        "3. **Задать вопрос**: Вы можете задать любой вопрос, выбрав соответствующий раздел, и я помогу вам найти ответ.\n\n"
         "Просто воспользуйтесь кнопками в меню или напишите /start для начала!"
     )
     bot.send_message(telegram_id, response_text, reply_markup=Keyboard.create_main_menu())
@@ -92,6 +98,7 @@ def handle_often_questions(call):
     markup = Keyboard.create_initial_questions_markup(questions_answers=questions_answers)
     bot.send_message(telegram_id, "Список частых вопросов:", reply_markup=markup)
 
+
 # Показ всех вопросов из часто задаваемых
 @bot.callback_query_handler(func=lambda call: call.data == "show_all_questions")
 def show_all_questions(call):
@@ -112,6 +119,7 @@ def show_initial_questions(call):
         message_id=call.message.message_id,
         reply_markup=markup
     )
+
 
 # Выбор вопроса из часто задаваемых и отображение ответа
 @bot.callback_query_handler(func=lambda call: call.data.startswith("get_often_question_"))
