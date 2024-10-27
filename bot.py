@@ -6,8 +6,7 @@ import config
 import preproc_text
 from keyboards import Keyboard
 from initialization import BotInitializer
-import queue
-import threading
+import time
 
 
 # Настройка логирования
@@ -28,8 +27,6 @@ model = initializer.model
 
 # Обработка активных вопросов
 activity_question = False
-request_queue = queue.Queue()  # Очередь для хранения запросов
-queue_lock = threading.Lock()
 
 
 # Удаление предыдущего сообщения
@@ -182,7 +179,16 @@ def handle_user_question(message):
     topic = selected_topic[telegram_id]
     logger.info(f"User {telegram_id} asked a question on topic '{topic}': {question}")
     
-    answer = model.question(question, prompt_gener)
+    while True:
+        try:
+            if len(topic) > 0:
+                answer = model.question(f'вопрос на тему {topic}. '+ question, prompt_gener)
+            else:
+                answer = model.question(question, prompt_gener)
+            break  # Если успешно получили ответ, выходим из цикла
+        except Exception as e:
+            logger.warning(f"Model is busy. Retrying in 5 seconds... Error: {e}")
+            time.sleep(5)  # Задержка 5 секунд, если модель занята
     user_questions[telegram_id] = {'question': question, 'topic': topic, 'answer': answer}
     
     if '[img_data/imgs' in answer:
