@@ -8,7 +8,6 @@ from keyboards import Keyboard
 from initialization import BotInitializer
 import time
 
-
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -43,9 +42,14 @@ def send_welcome(message):
     telegram_id = message.chat.id
     delete_previous_message(telegram_id, message.message_id)
     logger.info(f"User {telegram_id} started the bot.")
+    commands = [
+        telebot.types.BotCommand("start", "Начать работу с ботом"),
+    ]
+    bot.set_my_commands(commands)
     bot.send_message(
         telegram_id,
-        "Добро пожаловать в QA бот компании СИЛА.\nНажмите на кнопку ниже и ознакомьтесь с документацией приложения:",
+        "🎉 Добро пожаловать в QA бот компании СИЛА! 🎉\n\n"
+        "Нажмите на кнопку ниже и ознакомьтесь с документацией приложения: ",
         reply_markup=Keyboard.create_main_menu()
     )
 
@@ -54,11 +58,11 @@ def send_welcome(message):
 def handle_random_message(message):
     telegram_id = message.chat.id
     response_text = (
-        "Привет! Я — QA бот компании СИЛА. Вот что я умею:\n\n"
-        "1. **Документация**: Нажмите на кнопку 'Документация' в меню, чтобы ознакомиться с основными разделами.\n"
-        "2. **Часто задаваемые вопросы**: Нажмите 'Частые вопросы', чтобы просмотреть наиболее популярные вопросы.\n"
-        "3. **Задать вопрос**: Вы можете задать любой вопрос, выбрав соответствующий раздел, и я помогу вам найти ответ.\n\n"
-        "Просто воспользуйтесь кнопками в меню или напишите /start для начала!"
+        "🤖 Привет! Я — QA бот компании СИЛА. Вот что я умею:\n\n"
+        "1. 📚 **Документация**: Нажмите на кнопку 'Документация' в меню, чтобы ознакомиться с основными разделами.\n"
+        "2. ❓ **Часто задаваемые вопросы**: Нажмите 'Частые вопросы', чтобы просмотреть наиболее популярные вопросы.\n"
+        "3. ✉️ **Задать вопрос**: Вы можете задать любой вопрос, выбрав соответствующий раздел, и я помогу вам найти ответ.\n\n"
+        "Просто воспользуйтесь кнопками в меню или напишите /start для начала! 😊"
     )
     bot.send_message(telegram_id, response_text, reply_markup=Keyboard.create_main_menu())
 
@@ -71,7 +75,7 @@ def handle_documentation(call):
     markup = Keyboard.documentation_markup()
     with open("documentation/data.docx", "rb") as file:
         bot.send_document(
-            telegram_id, file, caption="Ознакомьтесь с документацией.", reply_markup=markup
+            telegram_id, file, caption="📄 Ознакомьтесь с документацией.", reply_markup=markup
         )
 
 
@@ -82,7 +86,8 @@ def go_back(call):
     delete_previous_message(telegram_id, call.message.message_id)
     bot.send_message(
         telegram_id,
-        "Добро пожаловать в QA бот компании СИЛА.\nНажмите на кнопку ниже и ознакомьтесь с документацией приложения:",
+        "🎉 Добро пожаловать в QA бот компании СИЛА! 🎉\n\n"
+        "Нажмите на кнопку ниже и ознакомьтесь с документацией приложения:",
         reply_markup=Keyboard.create_main_menu()
     )
 
@@ -93,7 +98,7 @@ def handle_often_questions(call):
     telegram_id = call.message.chat.id
     delete_previous_message(telegram_id, call.message.message_id)
     markup = Keyboard.create_initial_questions_markup(questions_answers=questions_answers)
-    bot.send_message(telegram_id, "Список частых вопросов:", reply_markup=markup)
+    bot.send_message(telegram_id, "🔍 Список частых вопросов:", reply_markup=markup)
 
 
 # Показ всех вопросов из часто задаваемых
@@ -125,12 +130,12 @@ def handle_question(call):
         question_index = int(call.data.split("get_often_question_")[1])
         answer = questions_answers[question_index][1]
         markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton(text="Назад", callback_data="show_initial_questions"))
+        markup.add(types.InlineKeyboardButton(text="🔙 Назад", callback_data="show_initial_questions"))
         if '[img_data/imgs' in answer:
             image_paths, cleaned_text = preproc_text.extract_and_remove_image_paths(answer)
 
             bot.send_message(call.message.chat.id, cleaned_text)
-            
+
             # Отправляем группу медиа
             media = [telebot.types.InputMediaPhoto(open(photo[1:-1], 'rb')) for photo in image_paths]
             bot.send_media_group(call.message.chat.id, media)
@@ -138,7 +143,8 @@ def handle_question(call):
             bot.send_message(call.message.chat.id, answer, reply_markup=markup)
     except (ValueError, IndexError) as e:
         logger.error(f"Error processing question: {e}")
-        bot.send_message(call.message.chat.id, "Произошла ошибка при обработке вашего запроса.")
+        bot.send_message(call.message.chat.id,
+                         "⚠️ Произошла ошибка при обработке вашего запроса. Пожалуйста, попробуйте снова.")
 
 
 # Запрос на выбор темы вопроса
@@ -151,7 +157,7 @@ def ask_question(call):
         markup.add(types.InlineKeyboardButton(text=topic, callback_data=f"topic_{topic}"))
     bot.send_message(
         telegram_id,
-        "В какой части документации у вас возник вопрос?",
+        "❓ В какой части документации у вас возник вопрос?",
         reply_markup=Keyboard.ask_question(markup)
     )
 
@@ -163,10 +169,16 @@ def choose_topic(call):
     delete_previous_message(telegram_id, call.message.message_id)
     topic = call.data.split("_", 1)[1]
     selected_topic[telegram_id] = topic if topic else "Другое"
-    bot.send_message(
-        telegram_id,
-        f"Вы выбрали вопрос с темой \"{topic}\".\nПожалуйста, введите ваш вопрос:"
-    )
+    if topic:
+        bot.send_message(
+            telegram_id,
+            f"📝 Вы выбрали вопрос с темой \"{topic}\".\nПожалуйста, введите ваш вопрос:"
+        )
+    else:
+        bot.send_message(
+            telegram_id,
+            "📝 Пожалуйста, введите ваш вопрос:"
+        )
 
 
 # Обработка вопроса пользователя и генерация ответа
@@ -178,11 +190,11 @@ def handle_user_question(message):
     question = message.text
     topic = selected_topic[telegram_id]
     logger.info(f"User {telegram_id} asked a question on topic '{topic}': {question}")
-    
+
     while True:
         try:
             if len(topic) > 0:
-                answer = model.question(f'вопрос на тему {topic}. '+ question, prompt_gener)
+                answer = model.question(f'вопрос на тему {topic}. ' + question, prompt_gener)
             else:
                 answer = model.question(question, prompt_gener)
             break  # Если успешно получили ответ, выходим из цикла
@@ -190,7 +202,7 @@ def handle_user_question(message):
             logger.warning(f"Model is busy. Retrying in 5 seconds... Error: {e}")
             time.sleep(5)  # Задержка 5 секунд, если модель занята
     user_questions[telegram_id] = {'question': question, 'topic': topic, 'answer': answer}
-    
+
     if '[img_data/imgs' in answer:
         image_paths, cleaned_text = preproc_text.extract_and_remove_image_paths(answer)
 
@@ -201,10 +213,10 @@ def handle_user_question(message):
         bot.send_media_group(message.chat.id, media)
     else:
         bot.send_message(telegram_id, answer)
-    
+
     bot.send_message(
         telegram_id,
-        "Вы можете нажать кнопку ниже, чтобы подтвердить, что ваш вопрос решён:",
+        "✅ Вы можете нажать кнопку ниже, чтобы подтвердить, что ваш вопрос решён:",
         reply_markup=Keyboard.received_answer_markup()
     )
 
@@ -239,11 +251,22 @@ def handle_quality_rating(call_data):
         prompt_gener.record_qna(question=question, answer=answer)
     
     logger.info(f"User {telegram_id} rated the answer quality: {quality_rating}")
-    bot.send_message(
-        telegram_id,
-        f"Спасибо за вашу оценку! Вы поставили оценку: {quality_rating}. Если у вас есть еще вопросы, не стесняйтесь задавать их!",
-        reply_markup=Keyboard.markup_back()
-    )
+    if quality_rating == 1:
+        bot.send_message(
+            telegram_id,
+            "😞 Нам очень жаль, что ответ вас не удовлетворил. Пожалуйста, свяжитесь с нашей технической поддержкой, чтобы мы могли помочь вам лучше:\n\n"
+            "📞 Телефон: +7 (495) 258-06-36\n"
+            "✉️ Email: info@lense.ru\n"
+            "🌐 Сайт: lense.ru\n\n"
+            "Мы ценим ваше мнение и хотим улучшить качество нашей поддержки! 🙏",
+            reply_markup=Keyboard.markup_back()
+        )
+    else:   
+        bot.send_message(
+            telegram_id,
+            f"Спасибо за вашу оценку! Вы поставили оценку: {quality_rating}. Если у вас есть еще вопросы, не стесняйтесь задавать их! 😊",
+            reply_markup=Keyboard.markup_back()
+        )
 
 
 if __name__ == '__main__':
